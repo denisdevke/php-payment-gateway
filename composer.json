@@ -1,0 +1,20 @@
+{
+    "name": "denisdevke/payment-gateway",
+    "description": "integrate all payment gateways to your project",
+    "type": "library",
+    "require": {
+        "php": ">7.0",
+        "ext-curl": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "Provider\\PaymentGateway\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "denisdevke",
+            "email": "deniskem.dev@gmail.com"
+        }
+    ]
+}
