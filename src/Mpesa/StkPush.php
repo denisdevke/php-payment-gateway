@@ -5,6 +5,7 @@ namespace Provider\PaymentGateway\Mpesa;
 use Dotenv\Dotenv;
 use Exception;
 use stdClass;
+use Provider\PaymentGateway\Logger;
 
 class StkPush extends App
 {
@@ -114,27 +115,100 @@ class StkPush extends App
     {
         header("Content-type: application/json; charset=utf-8");
         date_default_timezone_set('Africa/Nairobi');
-        $json = file_get_contents('php://input');
+        
+        // Initialize logger
+        Logger::init();
+        
+        $rawContent = file_get_contents('php://input');
+        
+        Logger::debug('STK Push callback raw content received', ['raw_content' => $rawContent]);
+        
+        if (empty($rawContent)) {
+            Logger::error('Empty request body received for STK Push callback');
+            throw new Exception('Empty request body');
+        }
 
-        $data = json_decode($json)->Body->stkCallback;
+        $requestData = json_decode($rawContent, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            Logger::error('Invalid JSON received for STK Push callback', [
+                'json_error' => json_last_error_msg(),
+                'raw_content' => $rawContent
+            ]);
+            throw new Exception('Invalid JSON: ' . json_last_error_msg());
+        }
+
+        // Extract the actual callback data from nested structure
+        // M-Pesa sends: {"Body": {"stkCallback": {...actual data...}}}
+        if (!isset($requestData['Body']['stkCallback'])) {
+            Logger::error('Missing stkCallback in request body', ['request_data' => $requestData]);
+            throw new Exception('Missing stkCallback in request body');
+        }
+
+        $data = (object) $requestData['Body']['stkCallback'];
+
+        if (!isset($data->MerchantRequestID)) {
+            Logger::error('Missing required field: MerchantRequestID', ['stk_callback_data' => $data]);
+            throw new Exception('Missing required field: MerchantRequestID');
+        }
 
         $response = new stdClass();
-        $response->status = $data->ResultCode;
+        $response->status = $data->ResultCode ?? null;
         $response->MerchantRequestID = $data->MerchantRequestID;
-        $response->CheckoutRequestID = $data->CheckoutRequestID;
-        $response->ResultDesc = $data->ResultDesc;
-        $response->fails = boolval($data->ResultCode);
+        $response->CheckoutRequestID = $data->CheckoutRequestID ?? null;
+        $response->ResultDesc = $data->ResultDesc ?? null;
+        $response->fails = boolval($data->ResultCode ?? 1);
 
-        if (property_exists($data, "CallbackMetadata")) {
-            $metadata = $data->CallbackMetadata->Item;
-            foreach ($metadata as $val) {
-                foreach ($val as $v) {
-                    $name = $val->Name;
-                    $response->$name = $v;
+        // Parse callback metadata if payment was successful (ResultCode 0)
+        if (isset($data->ResultCode) && $data->ResultCode == 0 && isset($requestData['Body']['stkCallback']['CallbackMetadata']['Item'])) {
+            Logger::info('STK Push payment successful', [
+                'merchant_request_id' => $data->MerchantRequestID,
+                'checkout_request_id' => $data->CheckoutRequestID ?? null,
+                'result_desc' => $data->ResultDesc ?? null
+            ]);
+            
+            $callbackData = self::parseCallbackMetadata($requestData['Body']['stkCallback']);
+            
+            Logger::debug('STK Push callback metadata parsed', ['metadata' => $callbackData]);
+            
+            // Add parsed metadata to response
+            foreach ($callbackData as $key => $value) {
+                $response->$key = $value;
+            }
+        } else {
+            Logger::warning('STK Push payment failed or incomplete', [
+                'merchant_request_id' => $data->MerchantRequestID,
+                'result_code' => $data->ResultCode ?? null,
+                'result_desc' => $data->ResultDesc ?? null
+            ]);
+        }
+
+        Logger::info('STK Push callback processed successfully', [
+            'merchant_request_id' => $data->MerchantRequestID,
+            'result_code' => $data->ResultCode ?? null
+        ]);
+
+        return $response;
+    }
+
+    /**
+     * Parse M-Pesa CallbackMetadata into a flat array
+     *
+     * @param array $stkCallback
+     * @return array
+     */
+    private static function parseCallbackMetadata(array $stkCallback): array
+    {
+        $metadata = [];
+
+        if (isset($stkCallback['CallbackMetadata']['Item'])) {
+            foreach ($stkCallback['CallbackMetadata']['Item'] as $item) {
+                if (isset($item['Name']) && isset($item['Value'])) {
+                    $metadata[$item['Name']] = $item['Value'];
                 }
             }
         }
 
-        return $response;
+        return $metadata;
     }
 }
