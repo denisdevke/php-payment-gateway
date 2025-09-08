@@ -1,58 +1,60 @@
-# Provider Pay
-## Php Payment Gateway V 1.0.5
+# PHP Payment Gateway
+## PHP Payment Gateway Library
 
-Makes it easy to intergrate payment gatway to your php project.
+Makes it easy to integrate payment gateways to your PHP project.
 
-install using composer
+Install using composer:
 
-> composer require deniskevke/payment-gateway
+```bash
+composer require denisdevke/payment-gateway
+```
 
-# M-Pesa intergration
+# M-Pesa Integration
 
-## configuring the app
-The following shows the configurations required depending on the API you want to use
+## Configuring the App
+The following shows the configurations required depending on the API you want to use:
 ```php
 $config = [
-        'CONSUMER_KEY' => '',
-        'CONSUMER_SECRET' => '',
-        'PASS_KEY' => '', // required for STK push
-        'SANDBOX' => true,
-    ];
+    'CONSUMER_KEY' => 'your_consumer_key',
+    'CONSUMER_SECRET' => 'your_consumer_secret',
+    'PASS_KEY' => 'your_passkey', // required for STK push
+    'SANDBOX' => true, // set to false for production
+];
 ```
 
-## make an stk push for buy goods
+## Make an STK Push for Buy Goods
 
-### initiating the request
+### Initiating the Request
 
-first import the dependency to your php class, create an instance of stkpush, then make your request as shown in the code below.
+First import the dependency to your PHP class, create an instance of StkPush, then make your request as shown in the code below:
 
 ```php
 
 
-// import the dependency
+// Import the dependency
 use Provider\PaymentGateway\Mpesa\StkPush;
 
-// you can use the code below to format user phone number
-preg_replace('/^(?:\+?254|0)?/', '254', $request->input("phone"));
+// You can use the code below to format user phone number
+$phone = preg_replace('/^(?:\+?254|0)?/', '254', $phone_number);
 
-$data = new StkPush($config);
-$data->setCallbackUrl("{YOUR_API_CALLBACK}") // required
-    ->setAmount("{AMOUNT}") // required
-    ->setPhone("{PHONE_NUMBER}") // required 254*********
-    ->setPartyB('123456')
-    ->setShortCode('123456')
-    ->setReference("{REF}") //reuired * e.g account number, room number, etc
-    ->setRemarks("your remarks"); // optional
+$stkPush = new StkPush($config);
+$stkPush->setCallbackUrl('https://your-domain.com/callback') // required
+    ->setAmount(100) // required - amount in KES
+    ->setPhone('254712345678') // required - format: 254XXXXXXXXX
+    ->setPartyB('174379') // shortcode or till number
+    ->setShortCode('174379') // business shortcode
+    ->setReference('ORDER123') // required - reference number
+    ->setRemarks('Payment for goods'); // optional
 
-$response = $data->tillRequestPush();
+$response = $stkPush->tillRequestPush();
 
 ```
 
-after the request is submmited, the following response will be ruturned from mpesa.
+After the request is submitted, the following response will be returned from M-Pesa.
 
-<b>Keep in mind that $response is an object of std class</b>. bellow is an example on how you can access response properties.
+**Keep in mind that $response is an object of stdClass**. Below is an example of how you can access response properties.
 
-to access MerchantRequestID for example `$response->MerchantRequestID`.
+To access MerchantRequestID for example: `$response->MerchantRequestID`
 
 ```json
 {
@@ -64,21 +66,21 @@ to access MerchantRequestID for example `$response->MerchantRequestID`.
 }
 ```
 
-### accessing the callback.
+### Accessing the Callback
 
-on every request you make, m-pesa will make a request to your api url you gave.
+On every request you make, M-Pesa will make a request to your API URL that you provided.
 
-I have made it easy for you to access the callback data.
+The library makes it easy for you to access the callback data:
 
 ```php
-// first import the dependencies
+// First import the dependencies
 use Provider\PaymentGateway\Mpesa\StkPush;
 
-// get the callback data
-$data = StkPush::getCallbackData();
+// Get the callback data
+$callbackData = StkPush::getCallbackData();
 ```
 
-below is the format of data returned, <b>dont forget that it is Std Class, don't confuse with array.</b>
+Below is the format of data returned. **Don't forget that it is stdClass, don't confuse with array:**
 
 ```json
 {
@@ -86,43 +88,47 @@ below is the format of data returned, <b>dont forget that it is Std Class, don't
   "MerchantRequestID": "119215-30497********",
   "CheckoutRequestID": "ws_CO_1802202319494*******",
   "ResultDesc": "The service request is processed successfully.",
+  "fails": false,
   "Amount": 1,
   "MpesaReceiptNumber": "RBI6******",
-  "Balance": "Balance",
   "TransactionDate": 20230218194956,
   "PhoneNumber": "254724******"
 }
 ```
 
-## Making B2C request
-### Api request
-reference the daraja api to understad the payload being passed
+## Making B2C Request
+### API Request
+Reference the Daraja API documentation to understand the payload being passed:
 https://developer.safaricom.co.ke/APIs/BusinessToCustomer
 ```php
 use Provider\PaymentGateway\Mpesa\B2C;
 
-$data = new B2C($config);
-$data->setCallbackUrl("https://enm9smnsyaaq8.x.pipedream.net/")
-    ->setAmount(1000)
-    ->setOriginatorConversationId($uniqueId = uniqid('', true))
-    ->setInitiatorName("username")
-    ->setSecurityCredential('password')
-    ->setCommandId("BusinessPayment")
-    ->setPartyA("paybill")
-    ->setPartyB('phone')
-    ->setRemarks("here are my remarks")
-    ->setOccasion("Testing");
+$b2c = new B2C($config);
+$uniqueId = uniqid('', true);
 
-$response = $data->pay();
+$b2c->setCallbackUrl('https://your-domain.com/b2c-callback')
+    ->setAmount(1000)
+    ->setOriginatorConversationId($uniqueId)
+    ->setInitiatorName('your_initiator_name') // API username
+    ->setSecurityCredential('your_password') // This will be encrypted automatically
+    ->setCommandId('BusinessPayment') // or SalaryPayment, BusinessPayment, PromotionPayment
+    ->setPartyA('600XXX') // shortcode/paybill number
+    ->setPartyB('254712345678') // recipient phone number
+    ->setRemarks('Payment for services')
+    ->setOccasion('Monthly payment');
+
+$response = $b2c->pay();
 echo json_encode($response);
 
 ```
 
-### Api callback
-use the following code to get the result from api callback.
+### API Callback
+Use the following code to get the result from API callback:
 ```php
-$data = Provider\PaymentGateway\Mpesa\B2C::getCallbackData();
-echo json_encode($data);
+use Provider\PaymentGateway\Mpesa\B2C;
+
+$callbackData = B2C::getCallbackData();
+echo json_encode($callbackData);
 ```
 #### Failed request
 ```json
@@ -154,64 +160,65 @@ echo json_encode($data);
   "B2CChargesPaidAccountAvailableFunds": 0
 }
 ```
-# PayPal integration
+# PayPal Integration
 
-First you need to configure your env by adding the following.
+First you need to configure your environment by adding the following to your `.env` file:
 ```dotenv
-PAYPAL_CLIENT_ID=""
-PAYPAL_SECRET=""
+PAYPAL_CLIENT_ID="your_paypal_client_id"
+PAYPAL_SECRET="your_paypal_secret"
+PAYMENT_SANDBOX=true
 ```
-You can always switch between live and sandbox by updating `
-PAYMENT_SANDBOX=true` to `false`.
+You can always switch between live and sandbox by updating `PAYMENT_SANDBOX=true` to `false`.
 
 ## Subscription
 
-To subscribe users to your system using PayPal follow the steps below.
+To subscribe users to your system using PayPal, follow the steps below:
 
-- import the dependencies
+### Import the Dependencies
 ```php
-use TProvider\PaymentGateway\Paypal\Subscription;
+use Provider\PaymentGateway\Paypal\Subscription;
 ```
-- create the class instance
+
+### Create the Class Instance
 ```php
-$paypal_subscription = new Subscription(base_path()); // base_path() is the base dir of your application where .env is located;
+$paypalSubscription = new Subscription('/path/to/your/project'); // Path to your project root where .env is located
 ```
-- subscribe the user
+
+### Subscribe the User
 ```php
-// define the subscriber
-$subscriber = array(
-    'name' => array(
+// Define the subscriber
+$subscriber = [
+    'name' => [
         'given_name' => 'John',
         'surname' => 'Doe'
-    ),
+    ],
     'email_address' => 'customer@example.com',
-    'shipping_address' => array(
-        'name' => array(
+    'shipping_address' => [
+        'name' => [
             'full_name' => 'John Doe'
-        ),
-        'address' => array(
-            'address_line_1' => '',
-            'address_line_2' => '',
-            'admin_area_2' => '',
-            'admin_area_1' => '',
-            'postal_code' => '',
+        ],
+        'address' => [
+            'address_line_1' => '123 Main St',
+            'address_line_2' => 'Apt 1',
+            'admin_area_2' => 'San Jose',
+            'admin_area_1' => 'CA',
+            'postal_code' => '95131',
             'country_code' => 'US'
-        )
-    )
-);
+        ]
+    ]
+];
 
-// specify your plan
-// create the plan on paypal and the the plan id
+// Specify your plan (create the plan on PayPal first and get the plan ID)
 $plan = new stdClass();
-$plan->id = 'P-9PP51961TH493415EMW4NX5A';
-$plan->value = '18';
+$plan->id = 'P-9PP51961TH493415EMW4NX5A'; // Your actual plan ID
+$plan->value = '18'; // Plan amount
 
-// create the agreement
-$agreement = $paypal_subscription->subscribe(
+// Create the subscription
+$subscription = $paypalSubscription->subscribe(
     $plan,
     $subscriber,
-    'https://enx316omyr0k.x.pipedream.net/', // return url
-    'https://enx316omyr0k.x.pipedream.net/' // cancel url
+    'https://your-domain.com/paypal/success', // return URL
+    'https://your-domain.com/paypal/cancel'   // cancel URL
 );
 
 ```
@@ -242,23 +249,29 @@ Sample response
 }
 ```
 
-Now direct the user to the approval url. The user will be direct to the return url you provided
+Now direct the user to the approval URL. The user will be redirected to the return URL you provided after approval.
 
-- check if subscription was success
+### Check if Subscription was Successful
 ```php
-    $subscriptionDetails = $paypal_subscription->getSubscriptionDetails('SUBSCRIPTION_ID');
-    if ($subscriptionDetails['status'] === 'ACTIVE') {
-        // Subscription was successfully approved and activated
-        // Update database with subscription status
-        // For example, update the user's subscription status in the database
-    } else {
-        // Subscription approval failed or encountered an error
-        // Handle the error
-        // For example, update the database to mark the subscription as failed
-        // And redirect the user to an error page
-    }
+$subscriptionDetails = $paypalSubscription->getSubscriptionDetails('SUBSCRIPTION_ID');
+if ($subscriptionDetails->status === 'ACTIVE') {
+    // Subscription was successfully approved and activated
+    // Update database with subscription status
+    echo 'Subscription is active!';
+} else {
+    // Subscription approval failed or encountered an error
+    // Handle the error appropriately
+    echo 'Subscription failed or pending approval';
+}
 ```
-- cancel subscription
+
+### Cancel Subscription
 ```php
-$paypal_subscription->cancelSubscription('SUBSCRIPTION_ID');
+$response = $paypalSubscription->cancelSubscription('SUBSCRIPTION_ID');
+```
+
+### Get All Plans
+```php
+$plans = $paypalSubscription->plans();
+echo json_encode($plans);
 ```
